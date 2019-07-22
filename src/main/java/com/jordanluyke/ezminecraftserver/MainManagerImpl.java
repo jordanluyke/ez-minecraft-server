@@ -117,7 +117,6 @@ public class MainManagerImpl implements MainManager {
                     config.save();
 
                     if(minecraftProcess != null) {
-                        logger.info("Restarting Minecraft..");
                         minecraftProcess.destroy();
                         return runMinecraft();
                     }
@@ -131,6 +130,7 @@ public class MainManagerImpl implements MainManager {
                 .split(" ");
         Process proc;
         try {
+            logger.info("Starting Minecraft..");
             proc = new ProcessBuilder()
                     .directory(new File(config.getPath()))
                     .command(cmd)
