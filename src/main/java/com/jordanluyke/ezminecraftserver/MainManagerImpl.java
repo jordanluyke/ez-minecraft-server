@@ -130,7 +130,7 @@ public class MainManagerImpl implements MainManager {
                 .split(" ");
         Process proc;
         try {
-            logger.info("Starting Minecraft..");
+            logger.info("Starting Minecraft");
             proc = new ProcessBuilder()
                     .directory(new File(config.getPath()))
                     .command(cmd)
