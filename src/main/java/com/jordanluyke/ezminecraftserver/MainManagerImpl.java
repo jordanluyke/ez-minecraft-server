@@ -91,7 +91,6 @@ public class MainManagerImpl implements MainManager {
                                 return Observable.empty();
                             logger.info("{} is latest version", id);
                             config.setVersion(id);
-                            config.save();
                             break;
                         }
                     }
@@ -115,6 +114,7 @@ public class MainManagerImpl implements MainManager {
                 .flatMapCompletable(res -> {
                     Path serverPath = Paths.get(config.getPath(), "minecraft_server.jar");
                     Files.write(serverPath, res.getRawBody());
+                    config.save();
 
                     if(minecraftProcess != null) {
                         logger.info("Restarting Minecraft..");
