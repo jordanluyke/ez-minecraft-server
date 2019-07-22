@@ -3,7 +3,6 @@ package com.jordanluyke.ezminecraftserver;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jordanluyke.ezminecraftserver.util.NodeUtil;
-import edu.emory.mathcs.backport.java.util.Arrays;
 import io.reactivex.Completable;
 import io.reactivex.Observable;
 import lombok.Getter;
@@ -15,8 +14,6 @@ import javax.inject.Singleton;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.time.Instant;
-import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
 
@@ -31,7 +28,7 @@ public class Config {
     public static final String defaultMinecraftPath = System.getProperty("user.home") + "/minecraft";
     public static final String defaultMemoryAllocation = "1";
     public static final String cwd = System.getProperty("user.dir");
-    public static final String configPath = cwd + "/config.json";
+    public static final String configPath = cwd + "/ez-config.json";
 
     private String path;
     private String version;
