@@ -25,7 +25,7 @@ import java.util.concurrent.TimeUnit;
 public class MainManagerImpl implements MainManager {
     private static final Logger logger = LogManager.getLogger(MainManager.class);
     private static final long updateInterval = 30;
-    private static final TimeUnit updateUnit = TimeUnit.SECONDS;
+    private static final TimeUnit updateUnit = TimeUnit.MINUTES;
 
     private Process minecraftProcess;
 
