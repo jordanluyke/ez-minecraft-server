@@ -13,7 +13,9 @@ import org.apache.logging.log4j.Logger;
 import javax.inject.Singleton;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.Optional;
 import java.util.stream.Stream;
 
@@ -28,7 +30,8 @@ public class Config {
     public static final String defaultMinecraftPath = System.getProperty("user.home") + "/minecraft";
     public static final String defaultMemoryAllocation = "1";
     public static final String cwd = System.getProperty("user.dir");
-    public static final String configPath = cwd + "/ez-config.json";
+    public static final String configFile = "ez-config.json";
+    public static final Path defaultConfigFilePath = Paths.get(cwd, configFile);
 
     private String path;
     private String version;
@@ -36,21 +39,21 @@ public class Config {
 
     public Observable<Boolean> load() {
         try {
-            if(Files.exists(Paths.get(Config.configPath))) {
-                byte[] bytes = Files.readAllBytes(Paths.get(Config.configPath));
-                JsonNode body = NodeUtil.getJsonNode(bytes);
-                Optional<String> path = NodeUtil.get(body, "path");
-                Optional<String> version = NodeUtil.get(body, "version");
-                Optional<String> memoryAllocation = NodeUtil.get(body, "memoryAllocation");
-                if(Stream.of(path, version, memoryAllocation).anyMatch(param -> !param.isPresent()))
-                    return Observable.just(false);
-                setPath(path.get());
-                setVersion(version.get());
-                setMemoryAllocation(memoryAllocation.get());
-                logger.info("Config loaded");
-                return Observable.just(true);
-            }
-            return Observable.just(false);
+            Optional<Path> configFilePath = getConfigFilePath();
+            if(!configFilePath.isPresent())
+                return Observable.just(false);
+            byte[] bytes = Files.readAllBytes(configFilePath.get());
+            JsonNode body = NodeUtil.getJsonNode(bytes);
+            Optional<String> path = NodeUtil.get(body, "path");
+            Optional<String> version = NodeUtil.get(body, "version");
+            Optional<String> memoryAllocation = NodeUtil.get(body, "memoryAllocation");
+            if(Stream.of(path, version, memoryAllocation).anyMatch(param -> !param.isPresent()))
+                return Observable.just(false);
+            setPath(path.get());
+            setVersion(version.get());
+            setMemoryAllocation(memoryAllocation.get());
+            logger.info("Config loaded");
+            return Observable.just(true);
         } catch(IOException e) {
             return Observable.error(new RuntimeException(e.getMessage()));
         }
@@ -62,11 +65,21 @@ public class Config {
         node.put("version", version);
         node.put("memoryAllocation", memoryAllocation);
         try {
-            Files.write(Paths.get(configPath), NodeUtil.mapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(node));
+            Path configFilePath = getConfigFilePath().orElse(defaultConfigFilePath);
+            Files.write(configFilePath, NodeUtil.mapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(node));
             logger.info("Config updated");
             return Completable.complete();
         } catch(IOException e) {
             return Completable.error(new RuntimeException("IOException"));
         }
+    }
+
+    private Optional<Path> getConfigFilePath() {
+        return Stream.of(
+                Paths.get(cwd, configFile),
+                Paths.get(defaultMinecraftPath, configFile)
+        )
+                .filter(path -> Files.exists(path))
+                .findFirst();
     }
 }
