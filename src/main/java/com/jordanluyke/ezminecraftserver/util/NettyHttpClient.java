@@ -10,10 +10,13 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http.*;
+import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
 import io.reactivex.Observable;
+import lombok.Getter;
+import lombok.Setter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -23,7 +26,11 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.Collections;
+import java.util.Map;
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.HashMap;
 import java.util.stream.Collectors;
 
 /**
@@ -41,13 +48,8 @@ public class NettyHttpClient {
     }
 
     public static Observable<ClientResponse> get(String url, Map<String, Object> params, Map<String, String> headers) {
-        return get(url, params, headers, HttpHeaderValues.APPLICATION_JSON.toString());
-    }
-
-    public static Observable<ClientResponse> get(String url, Map<String, Object> params, Map<String, String> headers, String contentType) {
-        if(params.size() > 0)
-            url += "?" + toQuerystring(params);
-        return request(url, HttpMethod.GET, new byte[0], headers, contentType);
+        String _url = params.size() > 0 ? url + "?" + toQuerystring(params) : url;
+        return request(_url, HttpMethod.GET, new byte[0], headers);
     }
 
     public static Observable<ClientResponse> post(String url) {
@@ -59,11 +61,7 @@ public class NettyHttpClient {
     }
 
     public static Observable<ClientResponse> post(String url, Map<String, Object> body, Map<String, String> headers) {
-        return post(url, body, headers, HttpHeaderValues.APPLICATION_JSON.toString());
-    }
-
-    public static Observable<ClientResponse> post(String url, Map<String, Object> body, Map<String, String> headers, String contentType) {
-        return request(url, HttpMethod.POST, bodyToBytes(body, contentType), headers, contentType);
+        return request(url, HttpMethod.POST, body, headers);
     }
 
     public static Observable<ClientResponse> put(String url) {
@@ -75,11 +73,7 @@ public class NettyHttpClient {
     }
 
     public static Observable<ClientResponse> put(String url, Map<String, Object> body, Map<String, String> headers) {
-        return put(url, body, headers, HttpHeaderValues.APPLICATION_JSON.toString());
-    }
-
-    public static Observable<ClientResponse> put(String url, Map<String, Object> body, Map<String, String> headers, String contentType) {
-        return request(url, HttpMethod.PUT, bodyToBytes(body, contentType), headers, contentType);
+        return request(url, HttpMethod.PUT, body, headers);
     }
 
     public static Observable<ClientResponse> delete(String url) {
@@ -91,14 +85,14 @@ public class NettyHttpClient {
     }
 
     public static Observable<ClientResponse> delete(String url, Map<String, Object> body, Map<String, String> headers) {
-        return delete(url, body, headers, HttpHeaderValues.APPLICATION_JSON.toString());
+        return request(url, HttpMethod.DELETE, body, headers);
     }
 
-    public static Observable<ClientResponse> delete(String url, Map<String, Object> body, Map<String, String> headers, String contentType) {
-        return request(url, HttpMethod.DELETE, bodyToBytes(body, contentType), headers, contentType);
+    public static Observable<ClientResponse> request(String url, HttpMethod method, Map<String, Object> body, Map<String, String> headers) {
+        return request(url, method, bodyToBytes(body, headers), headers);
     }
 
-    public static Observable<ClientResponse> request(String url, HttpMethod method, byte[] body, Map<String, String> headers, String contentType) {
+    public static Observable<ClientResponse> request(String url, HttpMethod method, byte[] body, Map<String, String> headers) {
         URI uri;
         try {
             URI u = new URI(url);
@@ -140,16 +134,17 @@ public class NettyHttpClient {
                         pipeline.addLast(new SimpleChannelInboundHandler() {
                             HttpResponse response;
                             ByteBuf data = Unpooled.buffer();
-                            Timer timer = new Timer();
+                            Timer timer;
 
                             @Override
                             public void channelRead0(ChannelHandlerContext ctx, Object msg) {
                                 if(msg instanceof HttpResponse) {
                                     response = (HttpResponse) msg;
 
-                                    if(response.headers().contains(HttpHeaderNames.CONTENT_TYPE, HttpHeaderValues.APPLICATION_OCTET_STREAM, true)) {
+                                    if(isBinaryFile(response.headers())) {
                                         long contentLength = HttpUtil.getContentLength(response);
                                         logger.info("Downloading: {}", url);
+                                        timer = new Timer();
                                         timer.schedule(new TimerTask() {
                                             @Override
                                             public void run() {
@@ -169,16 +164,19 @@ public class NettyHttpClient {
                                     data = Unpooled.copiedBuffer(data, content.content());
 
                                     if(content instanceof LastHttpContent) {
-                                        if(response.headers().contains(HttpHeaderNames.CONTENT_TYPE, HttpHeaderValues.APPLICATION_OCTET_STREAM, true)) {
+                                        if(isBinaryFile(response.headers())) {
                                             timer.cancel();
                                             timer.purge();
                                             logger.info("Download complete");
                                         }
 
                                         res.setRawBody(data.array());
-                                        ctx.close();
                                     }
                                 }
+                            }
+
+                            private boolean isBinaryFile(HttpHeaders httpHeaders) {
+                                return httpHeaders.contains(HttpHeaderNames.CONTENT_TYPE, HttpHeaderValues.APPLICATION_OCTET_STREAM, true);
                             }
                         });
                     }
@@ -193,17 +191,20 @@ public class NettyHttpClient {
                     HttpRequest request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, method, path, content);
                     request.headers().set(HttpHeaderNames.HOST, uri.getHost());
                     request.headers().set(HttpHeaderNames.ACCEPT_ENCODING, HttpHeaderValues.GZIP);
-                    request.headers().set(HttpHeaderNames.CONTENT_TYPE, contentType);
+                    request.headers().set(HttpHeaderNames.CONTENT_TYPE, headers.getOrDefault(HttpHeaderNames.CONTENT_TYPE.toString(), HttpHeaderValues.APPLICATION_JSON.toString()));
                     request.headers().set(HttpHeaderNames.CONTENT_LENGTH, content.readableBytes());
                     headers.forEach((key, value) -> request.headers().set(key, value));
                     return channelFutureToObservable(channel.writeAndFlush(request));
                 })
                 .flatMap(channel -> channelFutureToObservable(channel.closeFuture()))
-                .doOnNext(Void -> group.shutdownGracefully())
-                .map(Void -> {
-                    res.validate();
-                    return res;
-                });
+                .flatMap(Void -> {
+                    if(res.getRawBody() == null)
+                        return Observable.error(new RuntimeException("body is null"));
+                    if(res.getStatusCode() == -1)
+                        return Observable.error(new RuntimeException("statusCode is null"));
+                    return Observable.just(res);
+                })
+                .doOnNext(Void -> group.shutdownGracefully());
     }
 
     private static Observable<Channel> channelFutureToObservable(ChannelFuture channelFuture) {
@@ -218,9 +219,10 @@ public class NettyHttpClient {
         });
     }
 
-    private static byte[] bodyToBytes(Map<String, Object> body, String contentType) {
+    private static byte[] bodyToBytes(Map<String, Object> body, Map<String, String> headers) {
         if(body.size() == 0)
             return new byte[0];
+        String contentType = headers.get(HttpHeaderNames.CONTENT_TYPE.toString());
         if(contentType.equals(HttpHeaderValues.APPLICATION_JSON.toString())) {
             try {
                 return new ObjectMapper().writeValueAsBytes(body);
@@ -246,49 +248,15 @@ public class NettyHttpClient {
         }
     }
 
+    @Getter
+    @Setter
     public static class ClientResponse {
-
         private int statusCode;
         private byte[] rawBody;
         private Map<String, String> headers = new HashMap<>();
 
-        public ClientResponse() {
-        }
-
-        public void validate() {
-            if(rawBody == null)
-                throw new RuntimeException("body is null");
-            if(statusCode == -1)
-                throw new RuntimeException("statusCode is null");
-        }
-
         public String getBody() {
             return new String(rawBody, StandardCharsets.UTF_8);
         }
-
-        public byte[] getRawBody() {
-            return rawBody;
-        }
-
-        public int getStatusCode() {
-            return statusCode;
-        }
-
-        public void setStatusCode(int statusCode) {
-            this.statusCode = statusCode;
-        }
-
-        public Map<String, String> getHeaders() {
-            return headers;
-        }
-
-        public void setHeaders(Map<String, String> headers) {
-            this.headers = headers;
-        }
-
-        public void setRawBody(byte[] rawBody) {
-            this.rawBody = rawBody;
-        }
     }
 }
-
