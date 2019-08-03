@@ -16,7 +16,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Optional;
-import java.util.Scanner;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -39,41 +38,12 @@ public class MainManagerImpl implements MainManager {
     @Override
     public Completable start() {
         return config.load()
-                .onErrorResumeNext(Observable.just(false))
-                .flatMapCompletable(success -> {
-                    if(!success)
-                        return setup();
-                    return Completable.complete();
-                })
-                .andThen(Completable.defer(this::runMinecraft))
+                .andThen(runMinecraft())
                 .doOnComplete(() -> {
                     Observable.interval(updateInterval, updateInterval, updateUnit)
                             .flatMapCompletable(Void1 -> update())
                             .blockingAwait();
                 });
-    }
-
-    private Completable setup() {
-        Scanner scanner = new Scanner(System.in);
-
-        System.out.print(String.format("Path: (%s) ", Config.defaultMinecraftPath));
-        String pathInput = scanner.nextLine().trim();
-        String path = pathInput.isEmpty() ? Config.defaultMinecraftPath : pathInput;
-        if(!Files.exists(Paths.get(path))) {
-            boolean created = Paths.get(path).toFile().mkdir();
-            if(!created) {
-                logger.error("Failed to create path: {}", path);
-                return Completable.error(new RuntimeException("Unable to create path"));
-            }
-        }
-        config.setPath(path);
-
-        System.out.print(String.format("Memory allocation in GB: (%s) ", Config.defaultMemoryAllocation));
-        String memoryInput = scanner.nextLine().trim();
-        String memoryAllocation = memoryInput.isEmpty() ? Config.defaultMemoryAllocation : memoryInput;
-        config.setMemoryAllocation(memoryAllocation);
-
-        return update();
     }
 
     private Completable update() {

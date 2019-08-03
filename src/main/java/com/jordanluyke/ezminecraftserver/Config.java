@@ -16,7 +16,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Scanner;
 import java.util.stream.Stream;
 
 /**
@@ -37,25 +39,22 @@ public class Config {
     private String version;
     private String memoryAllocation;
 
-    public Observable<Boolean> load() {
+    public Completable load() {
         try {
             Optional<Path> configFilePath = getConfigFilePath();
             if(!configFilePath.isPresent())
-                return Observable.just(false);
+                return setup();
             byte[] bytes = Files.readAllBytes(configFilePath.get());
             JsonNode body = NodeUtil.getJsonNode(bytes);
-            Optional<String> path = NodeUtil.get(body, "path");
-            Optional<String> version = NodeUtil.get(body, "version");
-            Optional<String> memoryAllocation = NodeUtil.get(body, "memoryAllocation");
-            if(Stream.of(path, version, memoryAllocation).anyMatch(param -> !param.isPresent()))
-                return Observable.just(false);
-            setPath(path.get());
-            setVersion(version.get());
-            setMemoryAllocation(memoryAllocation.get());
+            NodeUtil.get(body, "path").ifPresent(p -> path = p);
+            NodeUtil.get(body, "version").ifPresent(v -> version = v);
+            NodeUtil.get(body, "memoryAllocation").ifPresent(m -> memoryAllocation = m);
+            if(Stream.of(path, version, memoryAllocation).anyMatch(Objects::isNull))
+                return setup();
             logger.info("Config loaded");
-            return Observable.just(true);
+            return Completable.complete();
         } catch(IOException e) {
-            return Observable.error(new RuntimeException(e.getMessage()));
+            return Completable.error(new RuntimeException(e.getMessage()));
         }
     }
 
@@ -72,6 +71,27 @@ public class Config {
         } catch(IOException e) {
             return Completable.error(new RuntimeException("IOException"));
         }
+    }
+
+    private Completable setup() {
+        Scanner scanner = new Scanner(System.in);
+
+        System.out.print(String.format("Path: (~/minecraft)"));
+        String pathInput = scanner.nextLine().trim();
+        path = pathInput.isEmpty() ? Config.defaultMinecraftPath : pathInput;
+        if(!Files.exists(Paths.get(path))) {
+            boolean created = Paths.get(path).toFile().mkdir();
+            if(!created) {
+                logger.error("Failed to create path: {}", path);
+                return Completable.error(new RuntimeException("Unable to create path"));
+            }
+        }
+
+        System.out.print(String.format("Memory allocation in GB: (%s) ", Config.defaultMemoryAllocation));
+        String memoryInput = scanner.nextLine().trim();
+        memoryAllocation = memoryInput.isEmpty() ? Config.defaultMemoryAllocation : memoryInput;
+
+        return Completable.complete();
     }
 
     private Optional<Path> getConfigFilePath() {
