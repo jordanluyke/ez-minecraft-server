@@ -6,7 +6,9 @@ import com.jordanluyke.ezminecraftserver.util.ErrorHandlingObserver;
 import com.jordanluyke.ezminecraftserver.util.NettyHttpClient;
 import com.jordanluyke.ezminecraftserver.util.NodeUtil;
 import io.reactivex.Completable;
+import io.reactivex.Maybe;
 import io.reactivex.Observable;
+import io.reactivex.Single;
 import io.reactivex.schedulers.Schedulers;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -49,7 +51,7 @@ public class MainManagerImpl implements MainManager {
     private Completable update() {
         return NettyHttpClient.get("https://launchermeta.mojang.com/mc/game/version_manifest.json")
                 .map(res -> NodeUtil.getJsonNode(res.getRawBody()))
-                .flatMap(versionBody -> {
+                .flatMapMaybe(versionBody -> {
                     JsonNode versions = versionBody.get("versions");
                     Optional<String> url = Optional.empty();
                     for(JsonNode version : versions) {
@@ -58,25 +60,26 @@ public class MainManagerImpl implements MainManager {
                         url = NodeUtil.get(version, "url");
                         if(type.equals("release")) {
                             if(id.equals(config.getVersion()))
-                                return Observable.empty();
+                                return Maybe.empty();
                             logger.info("{} is latest version", id);
                             config.setVersion(id);
                             break;
                         }
                     }
                     if(!url.isPresent())
-                        return Observable.error(new RuntimeException("url not found"));
-                    return NettyHttpClient.get(url.get());
+                        return Maybe.error(new RuntimeException("url not found"));
+                    return NettyHttpClient.get(url.get())
+                            .toMaybe();
                 })
                 .map(res -> NodeUtil.getJsonNode(res.getRawBody()))
-                .flatMap(packageBody -> {
+                .flatMapSingle(packageBody -> {
                     String version = NodeUtil.getOrThrow(packageBody, "id");
                     JsonNode downloads = packageBody.get("downloads");
                     if(downloads == null)
-                        return Observable.error(new RuntimeException("Bad response"));
+                        return Single.error(new RuntimeException("Bad response"));
                     JsonNode server = downloads.get("server");
                     if(server == null)
-                        return Observable.error(new RuntimeException("Bad response"));
+                        return Single.error(new RuntimeException("Bad response"));
                     String url = NodeUtil.getOrThrow(server, "url");
                     logger.info("Fetching server version: {}", version);
                     return NettyHttpClient.get(url);
