@@ -5,11 +5,11 @@ import com.google.inject.Inject;
 import com.jordanluyke.ezminecraftserver.util.ErrorHandlingObserver;
 import com.jordanluyke.ezminecraftserver.util.NettyHttpClient;
 import com.jordanluyke.ezminecraftserver.util.NodeUtil;
-import io.reactivex.Completable;
-import io.reactivex.Maybe;
-import io.reactivex.Observable;
-import io.reactivex.Single;
-import io.reactivex.schedulers.Schedulers;
+import io.reactivex.rxjava3.core.Completable;
+import io.reactivex.rxjava3.core.Maybe;
+import io.reactivex.rxjava3.core.Observable;
+import io.reactivex.rxjava3.core.Single;
+import io.reactivex.rxjava3.schedulers.Schedulers;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -55,9 +55,9 @@ public class MainManagerImpl implements MainManager {
                     JsonNode versions = versionBody.get("versions");
                     Optional<String> url = Optional.empty();
                     for(JsonNode version : versions) {
-                        String id = NodeUtil.getOrThrow(version, "id");
-                        String type = NodeUtil.getOrThrow(version, "type");
-                        url = NodeUtil.get(version, "url");
+                        String id = NodeUtil.getOrThrow("id", version);
+                        String type = NodeUtil.getOrThrow("type", version);
+                        url = NodeUtil.get("url", version);
                         if(type.equals("release")) {
                             if(id.equals(config.getVersion()))
                                 return Maybe.empty();
@@ -73,14 +73,14 @@ public class MainManagerImpl implements MainManager {
                 })
                 .map(res -> NodeUtil.getJsonNode(res.getRawBody()))
                 .flatMapSingle(packageBody -> {
-                    String version = NodeUtil.getOrThrow(packageBody, "id");
+                    String version = NodeUtil.getOrThrow("id", packageBody);
                     JsonNode downloads = packageBody.get("downloads");
                     if(downloads == null)
                         return Single.error(new RuntimeException("Bad response"));
                     JsonNode server = downloads.get("server");
                     if(server == null)
                         return Single.error(new RuntimeException("Bad response"));
-                    String url = NodeUtil.getOrThrow(server, "url");
+                    String url = NodeUtil.getOrThrow("url", server);
                     logger.info("Fetching server version: {}", version);
                     return NettyHttpClient.get(url);
                 })

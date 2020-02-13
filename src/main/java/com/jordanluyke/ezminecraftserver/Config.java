@@ -3,8 +3,7 @@ package com.jordanluyke.ezminecraftserver;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jordanluyke.ezminecraftserver.util.NodeUtil;
-import io.reactivex.Completable;
-import io.reactivex.Observable;
+import io.reactivex.rxjava3.core.Completable;
 import lombok.Getter;
 import lombok.Setter;
 import org.apache.logging.log4j.LogManager;
@@ -46,9 +45,9 @@ public class Config {
                 return setup();
             byte[] bytes = Files.readAllBytes(configFilePath.get());
             JsonNode body = NodeUtil.getJsonNode(bytes);
-            NodeUtil.get(body, "path").ifPresent(p -> path = p);
-            NodeUtil.get(body, "version").ifPresent(v -> version = v);
-            NodeUtil.get(body, "memoryAllocation").ifPresent(m -> memoryAllocation = m);
+            NodeUtil.get("path", body).ifPresent(p -> path = p);
+            NodeUtil.get("version", body).ifPresent(v -> version = v);
+            NodeUtil.get("memoryAllocation", body).ifPresent(m -> memoryAllocation = m);
             if(Stream.of(path, version, memoryAllocation).anyMatch(Objects::isNull))
                 return setup();
             logger.info("Config loaded");

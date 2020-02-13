@@ -15,7 +15,7 @@ import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
-import io.reactivex.Single;
+import io.reactivex.rxjava3.core.Single;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
@@ -261,9 +261,11 @@ public class NettyHttpClient {
         private Map<String, String> headers = new HashMap<>();
 
         public String getBodyString() {
-            if(rawBody == null)
-                return null;
-            return new String(rawBody, StandardCharsets.UTF_8);
+            try {
+                return new String(rawBody, StandardCharsets.UTF_8);
+            } catch(Exception e) {
+                throw new RuntimeException("Unable to get string from null body");
+            }
         }
 
         public JsonNode getBodyJson() {

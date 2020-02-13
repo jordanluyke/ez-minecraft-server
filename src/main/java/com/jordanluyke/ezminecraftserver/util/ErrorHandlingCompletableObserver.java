@@ -1,7 +1,7 @@
 package com.jordanluyke.ezminecraftserver.util;
 
-import io.reactivex.CompletableObserver;
-import io.reactivex.disposables.Disposable;
+import io.reactivex.rxjava3.core.CompletableObserver;
+import io.reactivex.rxjava3.disposables.Disposable;
 import org.apache.logging.log4j.LogManager;
 
 public class ErrorHandlingCompletableObserver implements CompletableObserver {
